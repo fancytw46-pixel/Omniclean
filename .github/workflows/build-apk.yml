@@ -1,0 +1,129 @@
+name: Build and Publish Debug APK
+
+"on":
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Verify Java Version
+        run: |
+          echo "Checking Java configuration..."
+          java -version
+          echo "JAVA_HOME: $JAVA_HOME"
+
+          if [ -z "$JAVA_HOME" ] || [ ! -x "$JAVA_HOME/bin/java" ]; then
+            echo "Error: JAVA_HOME is not set or java executable is not found."
+            exit 1
+          fi
+
+          JAVA_VERSION_OUTPUT=$("$JAVA_HOME/bin/java" -version 2>&1)
+          echo "$JAVA_VERSION_OUTPUT"
+
+          MAJOR_VERSION=$(echo "$JAVA_VERSION_OUTPUT" | head -n 1 | awk -F '"' '{print $2}' | awk -F '.' '{if ($1 == "1") print $2; else print $1}')
+
+          echo "Detected Java Major Version: $MAJOR_VERSION"
+
+          if [ -z "$MAJOR_VERSION" ] || ! [[ "$MAJOR_VERSION" =~ ^[0-9]+$ ]]; then
+            echo "Error: Could not detect active Java major version."
+            exit 1
+          fi
+
+          if [ "$MAJOR_VERSION" -lt 17 ]; then
+            echo "Error: Java major version ($MAJOR_VERSION) is below 17."
+            exit 1
+          fi
+
+          echo "Java 17 or newer confirmed."
+
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Ensure Debug Keystore Exists
+        run: |
+          if [ ! -f "./debug.keystore" ]; then
+            echo "Generating temporary debug keystore..."
+            keytool -genkey -v \
+              -keystore ./debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          else
+            echo "Debug keystore already exists."
+          fi
+
+      - name: Build Debug APK
+        run: |
+          gradle :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Verify APK
+        run: |
+          EXPECTED_APK="app/build/outputs/apk/debug/app-debug.apk"
+          if [ -f "$EXPECTED_APK" ] && [ -s "$EXPECTED_APK" ] && [[ "$EXPECTED_APK" == *.apk ]]; then
+            echo "APK found at expected path: $EXPECTED_APK"
+          else
+            echo "Error: Expected APK not found or invalid at $EXPECTED_APK"
+            echo "Searching in app/build/outputs/apk..."
+            if [ -d "app/build/outputs/apk" ]; then
+              find app/build/outputs/apk -maxdepth 3 -type f
+            fi
+            exit 1
+          fi
+
+      - name: Upload APK Backup Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Verifying GitHub CLI availability..."
+          gh --version
+
+          TAG_NAME="debug-apk-build-${{ github.run_number }}-${{ github.run_attempt }}"
+          RELEASE_TITLE="Debug APK Build #${{ github.run_number }}"
+          TARGET_SHA="${{ github.sha }}"
+          APK_SOURCE="app/build/outputs/apk/debug/app-debug.apk"
+
+          if [ ! -f "$APK_SOURCE" ]; then
+            echo "Error: APK file $APK_SOURCE missing before release."
+            exit 1
+          fi
+
+          echo "Creating GitHub Release with tag: $TAG_NAME"
+          gh release create "$TAG_NAME" "$APK_SOURCE#app-debug.apk" \
+            --target "$TARGET_SHA" \
+            --title "$RELEASE_TITLE" \
+            --latest \
+            --notes "Automated Debug APK build release"
+
+          echo "Release successfully created!"
+          echo "Permanent direct download link:"
+          echo "https://github.com/${{ github.repository }}/releases/latest/download/app-debug.apk"
