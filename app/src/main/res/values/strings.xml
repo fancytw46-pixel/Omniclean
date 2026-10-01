@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">OmniClean</string>
+    <string name="tab_clean">Clean</string>
+    <string name="tab_boost">Boost</string>
+    <string name="tab_battery">Battery</string>
+    <string name="tab_storage">Storage</string>
+    <string name="tab_security">Security</string>
+    <string name="tab_hardware">Diagnostics</string>
+    <string name="tab_tools">Toolbox</string>
+    <string name="one_tap_clean">One-Touch Deep Clean</string>
+    <string name="one_tap_boost">One-Tap RAM Boost</string>
+    <string name="emergency_cooldown">Emergency Cool Down</string>
+</resources>

@@ -1,0 +1,6 @@
+{
+  "name": "OmniClean",
+  "description": "Deep system cleaner, RAM booster, battery saver, hardware diagnostics, and security guard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
